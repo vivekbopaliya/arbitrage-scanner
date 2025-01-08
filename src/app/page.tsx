@@ -1,4 +1,4 @@
-import ArbitrageScanner from "@/components/ArbitrageScanner";
+import {ArbitrageScanner} from "@/components/ArbitrageScanner";
 
 export default function Home() {
   return (

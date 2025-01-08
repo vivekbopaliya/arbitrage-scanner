@@ -1,95 +1,100 @@
-"use client";
+'use client'
 
 import { useEffect, useState } from "react";
-import { Container, SimpleGrid, Paper, Title, Text } from "@mantine/core";
-import { AreaChart } from "@mantine/charts";
+import { Card, Text, Grid, Group, ThemeIcon } from "@mantine/core";
+import { SingularWebsocket } from "@/util/singularWS";
 
-interface ChartDataPoint {
-  date: string;
-  binancePrice: number;
+interface MarketData {
+    binancePrice: number;
+    serumPrice: number;
+    priceDifference: number;
+    percentDifference: string;
+    timestamp: string;
 }
 
-const ArbitrageScanner = () => {
-  const [chartData, setChartData] = useState<ChartDataPoint[]>([]);
-  const [isConnected, setIsConnected] = useState(false);
+export const ArbitrageScanner = () => {
+    const [marketData, setMarketData] = useState<MarketData[] | null>(null);
 
-  useEffect(() => {
-    const wsUrl = "ws://localhost:3001";
-    let ws: WebSocket | null = null;
-    let reconnectTimeout: NodeJS.Timeout;
+    useEffect(() => {
+        const wsManager = SingularWebsocket.getInstance();
 
-    const connectWebSocket = () => {
-      ws = new WebSocket(wsUrl);
+        const updateData = (data: MarketData[]) => {
+            setMarketData(data);
+        };
 
-      ws.onopen = () => {
-        console.log("WebSocket connected");
-        setIsConnected(true);
-      };
+        wsManager.registerCallback("difference.all", updateData);
 
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
+        wsManager.sendMessage({
+            method: "SUBSCRIBE",
+            params: ["difference.all"],
+        });
 
-          if (!data.price || typeof data.price !== "number") {
-            console.warn("Invalid WebSocket data:", data);
-            return;
-          }
+        return () => {
+            wsManager.deregisterCallback("difference", updateData);
+            wsManager.sendMessage({
+                method: "UNSUBSCRIBE",
+                params: ["difference.all"],
+            });
+        };
+    }, []);
 
-          console.log(data.price)
+    if (!marketData) {
+        return <Text>Loading market data...</Text>;
+    }
 
-          chartData.push({
-            binancePrice: data.price,
-            date: "dAd",
-          });
-
-          console.log("chartData", chartData)
-        } catch (error) {
-          console.error("Error parsing WebSocket message:", error);
-        }
-      };
-
-      ws.onerror = (error) => {
-        console.error("WebSocket error:", error);
-      };
-
-      ws.onclose = () => {
-        console.log("WebSocket disconnected, attempting to reconnect...");
-        setIsConnected(false);
-        reconnectTimeout = setTimeout(connectWebSocket, 5000); // Reconnect after 5 seconds
-      };
-    };
-
-    connectWebSocket();
-
-    return () => {
-      if (ws) {
-        ws.close();
-      }
-      clearTimeout(reconnectTimeout);
-    };
-  }, []);
-
-  console.log("chartData: ", chartData)
-
-  return (
-    <Container fluid>
-      <SimpleGrid cols={1} spacing="lg" style={{ minHeight: "500px" }}>
-        <Paper shadow="sm" p="md" radius="md" style={{ width: "100%" }}>
-          <Title order={2} mb="md">
-            Binance Price Chart
-          </Title>
-          {!isConnected && (
-            <div style={{ color: "red", marginBottom: "10px" }}>
-              Disconnected from WebSocket. Attempting to reconnect...
-            </div>
-          )}
-         {chartData.map((data) => (
-           <Text key={data.date}>{data.binancePrice}</Text>
-         ))}
-        </Paper>
-      </SimpleGrid>
-    </Container>
-  );
+    return (
+        <Card shadow="sm" padding="lg" radius="md" withBorder>
+            <Group >
+                <Text size="lg" fw={700}>
+                    Market: USDC / USDT
+                </Text>
+                <Text size="sm" color="dimmed">
+                    {new Date(marketData.timestamp).toLocaleTimeString()}
+                </Text>
+            </Group>
+            <Grid mt="md">
+                <Grid.Col span={6}>
+                    <Text size="sm" color="dimmed">
+                        Binance Price
+                    </Text>
+                    <Text size="xl" fw={700}>
+                        ${marketData.binancePrice.toFixed(4)}
+                    </Text>
+                </Grid.Col>
+                <Grid.Col span={6}>
+                    <Text size="sm" color="dimmed">
+                        Serum Price
+                    </Text>
+                    <Text size="xl" fw={700}>
+                        ${marketData.serumPrice.toFixed(4)}
+                    </Text>
+                </Grid.Col>
+                <Grid.Col span={6}>
+                    <Text size="sm" color="dimmed">
+                        Price Difference
+                    </Text>
+                    <Group>
+                        <ThemeIcon
+                            color={marketData.priceDifference >= 0 ? "green" : "red"}
+                            radius="xl"
+                            size="lg"
+                        >
+                           
+                        </ThemeIcon>
+                        <Text size="xl" fw={700} color={marketData.priceDifference >= 0 ? "green" : "red"}>
+                            ${marketData.priceDifference.toFixed(4)}
+                        </Text>
+                    </Group>
+                </Grid.Col>
+                <Grid.Col span={6}>
+                    <Text size="sm" color="dimmed">
+                        % Difference
+                    </Text>
+                    <Text size="xl" fw={700} color={parseFloat(marketData.percentDifference) >= 0 ? "green" : "red"}>
+                        {marketData.percentDifference}%
+                    </Text>
+                </Grid.Col>
+            </Grid>
+        </Card>
+    );
 };
-
-export default ArbitrageScanner;
